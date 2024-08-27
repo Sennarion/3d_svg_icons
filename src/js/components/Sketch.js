@@ -5,7 +5,7 @@ import dat from 'dat.gui';
 // import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';s
 // import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { TransformControls } from 'three/examples/jsm/Addons.js';
+import { TransformControls, SVGLoader } from 'three/examples/jsm/Addons.js';
 
 // for the glsl syntax highlighting
 const glsl = (strings, ...values) => {
@@ -40,11 +40,24 @@ export default class Sketch {
 
 	initScene() {
 		this.scene = new T.Scene();
+
+		const ambientLight = new T.AmbientLight(0xffffff, 1);
+		this.scene.add(ambientLight);
+
+		const directionalLight = new T.DirectionalLight(0xffffff, 1);
+		directionalLight.position.set(0, 0, 10);
+		this.scene.add(directionalLight);
+		directionalLight.castShadow = true;
+
+		directionalLight.shadow.camera.left = -10;
+		directionalLight.shadow.camera.right = 10;
+		directionalLight.shadow.camera.top = 10;
+		directionalLight.shadow.camera.bottom = -10;
 	}
 
 	initCamera() {
 		this.camera = new T.PerspectiveCamera(70, this.width / this.height, 0.001, 1000);
-		this.camera.position.set(0, 0, 2);
+		this.camera.position.set(0, 0, 20);
 	}
 
 	initRenderer() {
@@ -106,23 +119,83 @@ export default class Sketch {
 	}
 
 	addObjects() {
-		this.material = new T.ShaderMaterial({
-			extensions: {
-				derivatives: '#extension GL_OES_standard_derivatives : enable',
-			},
-			side: T.DoubleSide,
-			uniforms: {
-				time: { type: 'f', value: 0 },
-				resolution: { type: 'v4', value: new T.Vector4() },
-				uvRate1: { value: new T.Vector2(1, 1) },
-			},
-			vertexShader: this.vertex,
-			fragmentShader: this.fragment,
+		const loader = new SVGLoader();
+
+		const planeGeometry = new T.PlaneGeometry(30, 30, 30);
+		const planeMaterial = new T.MeshStandardMaterial({
+			color: '#ffffff',
 		});
 
-		this.geometry = new T.PlaneGeometry(1, 1, 1, 1);
-		this.plane = new T.Mesh(this.geometry, this.material);
-		this.scene.add(this.plane);
+		const plane = new T.Mesh(planeGeometry, planeMaterial);
+		this.scene.add(plane);
+		plane.position.z = -2;
+		plane.receiveShadow = true;
+
+		const addIcon = ({ iconSrc, scale, position, depth }) => {
+			loader.load(iconSrc, (data) => {
+				const paths = data.paths;
+				const group = new T.Group();
+
+				paths.forEach((path) => {
+					const material = new T.MeshStandardMaterial({
+						color: '#de7e00',
+						side: T.DoubleSide,
+						depthWrite: true,
+					});
+
+					const shapes = SVGLoader.createShapes(path);
+
+					shapes.forEach((shape) => {
+						const geometry = new T.ExtrudeGeometry(shape, {
+							depth,
+							bevelEnabled: false,
+						});
+						geometry.computeVertexNormals();
+						geometry.center();
+
+						const mesh = new T.Mesh(geometry, material);
+						mesh.castShadow = true;
+						group.add(mesh);
+					});
+				});
+
+				this.scene.add(group);
+				group.scale.set(scale, scale, scale);
+				group.position.set(...position);
+				group.rotateZ(Math.PI);
+				group.castShadow = true;
+				group.rotation.x = Math.PI * 0.05;
+				group.rotation.y = Math.PI * 0.05;
+			});
+		};
+
+		addIcon({
+			iconSrc: './static/fragile.svg',
+			scale: 0.01,
+			position: [-5, -5, 0],
+			depth: 30,
+		});
+
+		addIcon({
+			iconSrc: './static/umbrella.svg',
+			scale: 0.08,
+			position: [5, -5, 0],
+			depth: 4,
+		});
+
+		addIcon({
+			iconSrc: './static/fire.svg',
+			scale: 0.2,
+			position: [-5, 5, 0],
+			depth: 1.5,
+		});
+
+		addIcon({
+			iconSrc: './static/snowfake.svg',
+			scale: 0.02,
+			position: [5, 5, 0],
+			depth: 15,
+		});
 	}
 
 	setupResize() {
@@ -151,7 +224,7 @@ export default class Sketch {
 	render() {
 		if (!this.isPlaying) return;
 		this.time += 0.05;
-		this.material.uniforms.time.value = this.time;
+		// this.material.uniforms.time.value = this.time;
 		window.requestAnimationFrame(this.render.bind(this));
 		this.renderer.render(this.scene, this.camera);
 	}
